@@ -1,5 +1,18 @@
 import { near, log, BigInt, json, JSONValueKind } from "@graphprotocol/graph-ts";
-import { Account, Swap, AddLiquidity, Transaction, Pair, Token, LiquidityPosition } from "../generated/schema";
+import { User, Swap, AddLiquidity, Transaction, Pair, Token, LiquidityPosition, PangolinFactory } from "../generated/schema";
+import { FACTORY_ADDRESS } from "./helpers";
+
+export function fill_factory(
+    action: near.ActionValue,
+    receipt: near.ActionReceipt,
+    blockHeader: near.BlockHeader,
+    outcome: near.ExecutionOutcome
+) : PangolinFactory {
+
+  let factory = new PangolinFactory(FACTORY_ADDRESS)
+  factory.save()
+  return (factory)
+}
 
 export function fill_pair(
     action: near.ActionValue,
@@ -12,7 +25,6 @@ export function fill_pair(
     let rawString = outcome.logs[0]
     let splitString = rawString.split(' ')
   
-    pair.id = "1" // ATTENTION
     let token0 = fill_token(action, receipt, blockHeader, outcome, splitString[2].toString());
     let token1 = fill_token(action, receipt, blockHeader, outcome, splitString[5].toString());;
     pair.token0 = token0.id
@@ -20,7 +32,7 @@ export function fill_pair(
     pair.save()
     return (pair)
   }
-  
+
   export function fill_token(
     action: near.ActionValue,
     receipt: near.ActionReceipt,
@@ -32,7 +44,9 @@ export function fill_pair(
     let rawString = outcome.logs[0]
     let splitString = rawString.split(' ')
     let token = new Token(`${receiptId}`);
+  
     token.id = id
+    
     token.save()
   
     return (token)
