@@ -1,7 +1,10 @@
-import { near, log, BigInt, json, JSONValueKind } from "@graphprotocol/graph-ts";
-import { Account, Swap, AddLiquidity, Transaction, Pair, Token, LiquidityPosition } from "../generated/schema";
-import { fill_pair, fill_transaction } from "./utils";
+import { near, log, BigInt, json, JSONValueKind, BigDecimal } from "@graphprotocol/graph-ts";
+import { User, Swap, Pair, LiquidityPosition } from "../generated/schema";
+import { fill_pair, fill_transaction, fill_token } from "./utils";
+import { FACTORY_ADDRESS } from "./helpers"
 
+
+// PARSING ALL ACTIONS FROM startBlock
 export function handleReceipt(receipt: near.ReceiptWithOutcome): void {
   const actions = receipt.receipt.actions;
   
@@ -15,27 +18,25 @@ export function handleReceipt(receipt: near.ReceiptWithOutcome): void {
   }
 }
 
+// INDEXING DATAS
 function handleAction(
   action: near.ActionValue,
   receipt: near.ActionReceipt,
   blockHeader: near.BlockHeader,
   outcome: near.ExecutionOutcome
 ): void {
-  
+
   if (action.kind != near.ActionKind.FUNCTION_CALL) {
     log.info("Early return: {}", ["Not a function call"]);
     return;
   }
   
-  let accounts = new Account(receipt.signerId);
-
+  let users = new User(receipt.signerId);
   const functionCall = action.toFunctionCall();
 
 // SWAP FUNCTION CALL
   if (functionCall.methodName == "swap") {
     const receiptId = receipt.id.toHexString();
-    accounts.signerId = receipt.signerId;
-    accounts.timestamp = BigInt.fromU64(blockHeader.timestampNanosec/1000000000)
 
     let logs = new Swap(`${receiptId}`); // Initializing Swap entity
 
@@ -52,6 +53,7 @@ function handleAction(
         // Filling Pair entity
         let pair = fill_pair(action, receipt, blockHeader, outcome);
         logs.pair = pair.id
+        logs.sender = receipt.signerId // ATTENTION
         logs.from = receipt.signerId
         logs.to = receipt.receiverId
         logs.amount0In = BigInt.fromString(splitString[1])
@@ -65,31 +67,39 @@ function handleAction(
     log.info("Not processed - FunctionCall is: {}", [functionCall.methodName]);
   }
 
+// ADD_SIMPLE_POOL FUNCTION CALL
+  // if (functionCall.methodName == "add_simple_pool") {
+  //   let factory = new PangolinFactory(FACTORY_ADDRESS)
+
+  //   if(outcome.logs[0]!= null){
+  //     factory.pairCount = factory.pairCount + 1;
+  //   }
+  //   factory.save()
+  // } else {
+  //   log.info("Not processed - FunctionCall is: {}", [functionCall.methodName]);
+  // }
+
 // ADD_LIQUIDITY FUNCTION CALL
   if (functionCall.methodName == "add_liquidity") {
-  const receiptId = receipt.id.toHexString();
-    accounts.signerId = receipt.signerId;
+    const receiptId = receipt.id.toHexString();
 
-    let liquidity = new AddLiquidity(`${receiptId}`);
+    let liquidity = new LiquidityPosition(`${receiptId}`);
     if(outcome.logs[0]!= null){
-      liquidity.id = receipt.signerId;
-      liquidity.output = outcome.logs[0]
-      liquidity.timestamp = BigInt.fromU64(blockHeader.timestampNanosec/1000000000)
+      liquidity.id = receiptId;
+      let pair = new Pair(`${receiptId}`); // Initializing Pair entity
       let rawString = outcome.logs[0]
       let splitString = rawString.split(' ')
-      liquidity.functionCalled = functionCall.methodName
-      liquidity.functionAction = (splitString[0] + ' ' + splitString[1])
-      liquidity.firstPoolAmount = BigInt.fromString(splitString[2].split('"')[1])
-      liquidity.firstPool = splitString[3].slice(0, -2)
-      liquidity.secondPoolAmount = BigInt.fromString(splitString[4].split('"')[1])
-      liquidity.secondPool = splitString[5].slice(0, -3)
-      liquidity.sharesMinted = BigInt.fromString(splitString[7])
-
+      let token0 = fill_token(action, receipt, blockHeader, outcome, splitString[3].toString());
+      let token1 = fill_token(action, receipt, blockHeader, outcome, splitString[6].toString());;
+      pair.token0 = token0.id
+      pair.token1 = token1.id
+      pair.save()
+      liquidity.pair = pair.id
+      liquidity.liquidityTokenBalance = BigDecimal.fromString(splitString[7])
       liquidity.save()
     }
   } else {
     log.info("Not processed - FunctionCall is: {}", [functionCall.methodName]);
   }
-
-  accounts.save();
+  users.save();
 }

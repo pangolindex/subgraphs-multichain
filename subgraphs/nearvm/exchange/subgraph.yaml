@@ -9,13 +9,14 @@ dataSources:
     network: near-mainnet
     source:
       account: v2.ref-finance.near
-      startBlock: 65489310
+      startBlock: 50000000
     mapping:
       apiVersion: 0.0.5
       language: wasm/assemblyscript
       file: ./src/mapping.ts
       entities:
-        - Account
+        - PangolinFactory
+        - User
         - Swap
         - AddLiquidity
         - Transaction
